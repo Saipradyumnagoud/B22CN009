@@ -1,58 +1,80 @@
 import React, { useState } from 'react';
-import { Container, Typography, Box, Grid, TextField, Button, Paper } from '@mui/material';
+import { Container, Typography, Box, Grid, TextField, Button, Paper, CircularProgress } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
-// You will need to import your logging utility here
-// import logger from './utils/logger';
+import logger from './utils/logger';
 
-const theme = createTheme({
-  // You can customize the theme here
-});
+const theme = createTheme({});
 
 function App() {
   const [shortenedUrls, setShortenedUrls] = useState([]);
   const [longUrl, setLongUrl] = useState('');
-  const [validity, setValidity] = useState(30);
+  const [validity, setValidity] = useState('');
   const [customCode, setCustomCode] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleShortenUrl = async (event) => {
     event.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    // --- Client-side validation ---
     if (!longUrl) {
       setError('Original URL is required.');
+      setIsLoading(false);
+      logger.error('Attempted to shorten URL without a valid URL.', 'shortener-form');
       return;
     }
-    // You can add more robust URL validation here
-    // e.g., using a regex or a library like 'is-url'
 
-    // --- API Call Simulation ---
-    // In a real application, you would make an API call to your backend here.
-    // Replace this simulation with your actual fetch or axios call.
+    // Validate validity input
+    const validityInMinutes = validity ? parseInt(validity, 10) : 30;
+    if (isNaN(validityInMinutes)) {
+      setError('Validity must be a number in minutes.');
+      setIsLoading(false);
+      logger.error('Invalid validity input.', 'shortener-form');
+      return;
+    }
+
     try {
+      const payload = {
+        longUrl: longUrl,
+        validity: validityInMinutes,
+      };
+      if (customCode) {
+        payload.customCode = customCode;
+      }
+
+      const response = await fetch('http://localhost:4000/api/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to shorten URL on the server.');
+      }
+
       const newShortenedUrl = {
-        id: Date.now(), // Unique ID
-        original: longUrl,
-        shortened: `http://localhost:3000/mock_${Math.random().toString(36).substring(2, 7)}`,
-        validity: validity,
+        id: Date.now(),
+        original: result.longUrl,
+        shortened: result.shortUrl,
+        validity: result.validity || validityInMinutes,
       };
 
-      // Add the new URL to the list
       setShortenedUrls([...shortenedUrls, newShortenedUrl]);
-
-      // Reset form fields
       setLongUrl('');
-      setValidity(30);
+      setValidity('');
       setCustomCode('');
 
-      // Use your custom logger here instead of console.log
-      // logger.info('URL shortened successfully.', { original: longUrl, shortened: newShortenedUrl.shortened });
+      logger.info('URL shortened successfully.', 'shortener-form');
 
     } catch (err) {
-      setError('An error occurred. Please try again.');
-      // logger.error('Failed to shorten URL.', { details: err.message });
+      setError(`An error occurred: ${err.message}`);
+      logger.error(`An error occurred: ${err.message}`, 'shortener-form');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -64,7 +86,6 @@ function App() {
             React URL Shortener
           </Typography>
 
-          {/* URL Shortening Form */}
           <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
             <Typography variant="h5" component="h2" gutterBottom>
               Shorten a URL
@@ -87,6 +108,7 @@ function App() {
                     type="number"
                     value={validity}
                     onChange={(e) => setValidity(e.target.value)}
+                    placeholder="30"
                   />
                 </Grid>
                 <Grid item xs={6}>
@@ -108,15 +130,15 @@ function App() {
                     variant="contained"
                     fullWidth
                     sx={{ mt: 2 }}
+                    disabled={isLoading}
                   >
-                    Shorten URL
+                    {isLoading ? <CircularProgress size={24} /> : 'Shorten URL'}
                   </Button>
                 </Grid>
               </Grid>
             </Box>
           </Paper>
 
-          {/* Display of Shortened URLs */}
           <Paper elevation={3} sx={{ p: 4 }}>
             <Typography variant="h5" component="h2" gutterBottom>
               Shortened Links
